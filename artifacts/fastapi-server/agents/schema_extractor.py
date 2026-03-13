@@ -5,10 +5,14 @@ Reads the user query and identifies relevant HANA tables from the registry.
 
 import json
 import os
+import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from table_registry import get_all_table_summaries, find_tables_by_names, get_table_schema_ddl
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from table_registry import get_all_table_summaries, find_tables_by_names, get_table_schema_ddl, TABLE_REGISTRY
 from state import AgentState
 
 
@@ -24,7 +28,7 @@ def build_llm() -> ChatOpenAI:
 def schema_extractor_agent(state: AgentState) -> AgentState:
     llm = build_llm()
     all_summaries = get_all_table_summaries()
-    log_prefix = f'[SchemaExtractor] Analyzing query: "{state.user_query}"'
+    log_prefix = f'[SchemaExtractor] Analyzing query: "{state["user_query"]}"'
 
     system_prompt = f"""You are a SAP HANA database schema expert.
 Given a user question, identify the EXACT table names (in SCHEMA.TABLE format) needed to answer the question.
@@ -38,7 +42,7 @@ Rules:
 - Respond with ONLY a JSON array of full table names, e.g.: ["SALES.ORDERS", "SALES.CUSTOMERS"]
 - Do NOT include explanations, just the JSON array."""
 
-    user_prompt = f'User question: "{state.user_query}"\n\nWhich tables are needed? Return only a JSON array of full table names.'
+    user_prompt = f'User question: "{state["user_query"]}"\n\nWhich tables are needed? Return only a JSON array of full table names.'
 
     try:
         response = llm.invoke([
@@ -47,8 +51,6 @@ Rules:
         ])
 
         content = str(response.content).strip()
-
-        import re
         match = re.search(r'\[.*?\]', content, re.DOTALL)
         if not match:
             raise ValueError(f"Could not parse table list from LLM response: {content}")
@@ -57,21 +59,23 @@ Rules:
         relevant_tables = find_tables_by_names(table_names)
 
         if not relevant_tables:
-            from table_registry import TABLE_REGISTRY
             relevant_tables = TABLE_REGISTRY
 
         schema_context = get_table_schema_ddl(relevant_tables)
 
-        state.relevant_tables = relevant_tables
-        state.schema_context = schema_context
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(
-            f"[SchemaExtractor] Identified tables: {', '.join(t.full_name for t in relevant_tables)}"
-        )
+        return {
+            **state,
+            "relevant_tables": relevant_tables,
+            "schema_context": schema_context,
+            "agent_log": state["agent_log"] + [
+                log_prefix,
+                f"[SchemaExtractor] Identified tables: {', '.join(t.full_name for t in relevant_tables)}",
+            ],
+        }
 
     except Exception as e:
-        state.error = f"SchemaExtractor failed: {e}"
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(f"[SchemaExtractor] ERROR: {e}")
-
-    return state
+        return {
+            **state,
+            "error": f"SchemaExtractor failed: {e}",
+            "agent_log": state["agent_log"] + [log_prefix, f"[SchemaExtractor] ERROR: {e}"],
+        }

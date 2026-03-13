@@ -9,6 +9,9 @@ import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 from state import AgentState
 
 HANA_SQL_RULES = """SAP HANA SQL dialect rules you MUST follow:
@@ -38,19 +41,19 @@ def build_llm() -> ChatOpenAI:
 
 
 def sql_generator_agent(state: AgentState) -> AgentState:
-    if state.error:
+    if state["error"]:
         return state
 
     llm = build_llm()
-    iteration = state.iteration + 1
+    iteration = state["iteration"] + 1
     log_prefix = f"[SQLGenerator] Iteration {iteration} — generating SQL"
 
     correction_section = ""
-    if state.iteration > 0 and state.validation_feedback:
+    if state["iteration"] > 0 and state["validation_feedback"]:
         correction_section = (
             f"\n\nPREVIOUS ATTEMPT FAILED — Validator feedback to fix:\n"
-            f"{state.validation_feedback}\n\n"
-            f"Previous SQL:\n{state.generated_sql}\n\n"
+            f"{state['validation_feedback']}\n\n"
+            f"Previous SQL:\n{state['generated_sql']}\n\n"
             f"Please fix ALL the issues mentioned above."
         )
 
@@ -60,7 +63,7 @@ Generate a correct, efficient SQL query for SAP HANA that answers the user's que
 {HANA_SQL_RULES}
 
 Available schema:
-{state.schema_context}
+{state["schema_context"]}
 
 Rules for your response:
 - Output ONLY the SQL query, no explanations, no markdown code fences, no comments.
@@ -70,7 +73,7 @@ Rules for your response:
 - Add ORDER BY where it helps readability of results."""
 
     user_prompt = (
-        f'User question: "{state.user_query}"{correction_section}\n\nGenerate the SAP HANA SQL query now:'
+        f'User question: "{state["user_query"]}"{correction_section}\n\nGenerate the SAP HANA SQL query now:'
     )
 
     try:
@@ -84,14 +87,19 @@ Rules for your response:
         sql = re.sub(r'^```\s*', '', sql, flags=re.IGNORECASE)
         sql = re.sub(r'\s*```$', '', sql, flags=re.IGNORECASE).strip()
 
-        state.generated_sql = sql
-        state.iteration = iteration
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(f"[SQLGenerator] Generated SQL:\n{sql}")
+        return {
+            **state,
+            "generated_sql": sql,
+            "iteration": iteration,
+            "agent_log": state["agent_log"] + [
+                log_prefix,
+                f"[SQLGenerator] Generated SQL:\n{sql}",
+            ],
+        }
 
     except Exception as e:
-        state.error = f"SQLGenerator failed: {e}"
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(f"[SQLGenerator] ERROR: {e}")
-
-    return state
+        return {
+            **state,
+            "error": f"SQLGenerator failed: {e}",
+            "agent_log": state["agent_log"] + [log_prefix, f"[SQLGenerator] ERROR: {e}"],
+        }

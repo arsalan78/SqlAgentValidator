@@ -1,7 +1,7 @@
 """
 AGENT 3 — SQL Validator
 Validates the generated SQL for HANA dialect, semantic accuracy, and column existence.
-Returns feedback to the generator if validation fails so it can correct and retry.
+Sends feedback back to the generator if validation fails.
 """
 
 import json
@@ -9,6 +9,9 @@ import os
 import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from state import AgentState
 
@@ -23,11 +26,11 @@ def build_llm() -> ChatOpenAI:
 
 
 def sql_validator_agent(state: AgentState) -> AgentState:
-    if state.error:
+    if state["error"]:
         return state
 
     llm = build_llm()
-    log_prefix = f"[SQLValidator] Validating iteration {state.iteration} SQL"
+    log_prefix = f"[SQLValidator] Validating iteration {state['iteration']} SQL"
 
     system_prompt = f"""You are a senior SAP HANA database architect and SQL reviewer.
 
@@ -47,7 +50,7 @@ SAP HANA dialect rules:
 - No BOOLEAN type, use TINYINT (0/1)
 
 Available schema:
-{state.schema_context}
+{state["schema_context"]}
 
 Respond with a JSON object in this EXACT format (no extra text):
 {{
@@ -61,8 +64,8 @@ If the query is correct, set "passed": true and leave "issues" and "corrections"
 If there are problems, set "passed": false and list every issue and its specific correction."""
 
     user_prompt = (
-        f'User question: "{state.user_query}"\n\n'
-        f"SQL query to validate:\n{state.generated_sql}\n\n"
+        f'User question: "{state["user_query"]}"\n\n'
+        f"SQL query to validate:\n{state['generated_sql']}\n\n"
         f"Validate this query and return only the JSON object."
     )
 
@@ -92,20 +95,24 @@ If there are problems, set "passed": false and list every issue and its specific
                 + "\n".join(f"  {i+1}. {c}" for i, c in enumerate(corrections))
             )
 
-        state.validation_passed = passed
-        state.validation_feedback = feedback
-        state.final_sql = state.generated_sql if passed else ""
-
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(
-            f"[SQLValidator] Result: {'PASSED ✓' if passed else 'FAILED ✗'} — {summary}"
-        )
+        new_log = state["agent_log"] + [
+            log_prefix,
+            f"[SQLValidator] Result: {'PASSED ✓' if passed else 'FAILED ✗'} — {summary}",
+        ]
         if feedback:
-            state.agent_log.append(f"[SQLValidator] Feedback:\n{feedback}")
+            new_log.append(f"[SQLValidator] Feedback:\n{feedback}")
+
+        return {
+            **state,
+            "validation_passed": passed,
+            "validation_feedback": feedback,
+            "final_sql": state["generated_sql"] if passed else "",
+            "agent_log": new_log,
+        }
 
     except Exception as e:
-        state.error = f"SQLValidator failed: {e}"
-        state.agent_log.append(log_prefix)
-        state.agent_log.append(f"[SQLValidator] ERROR: {e}")
-
-    return state
+        return {
+            **state,
+            "error": f"SQLValidator failed: {e}",
+            "agent_log": state["agent_log"] + [log_prefix, f"[SQLValidator] ERROR: {e}"],
+        }
