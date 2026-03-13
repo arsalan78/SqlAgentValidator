@@ -22,7 +22,7 @@ except ImportError:
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 
 from table_registry import TABLE_REGISTRY
@@ -70,14 +70,13 @@ class ColumnInfo(BaseModel):
 
 
 class TableInfo(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     schema_name: str = Field(..., alias="schema")
     table_name: str
     full_name: str
     description: str
     columns: List[ColumnInfo]
-
-    class Config:
-        populate_by_name = True
 
 
 class TablesResponse(BaseModel):
