@@ -13,6 +13,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+# Auto-load .env file for local development (no-op if file doesn't exist)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
