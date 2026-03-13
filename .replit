@@ -49,3 +49,11 @@ timeoutMs = 20000
 [nix]
 channel = "stable-25_05"
 packages = ["libxcrypt"]
+
+[userenv]
+
+[userenv.shared]
+HANA_HOST = "dummy-hana-host.hanacloud.ondemand.com"
+HANA_PORT = "443"
+HANA_USER = "USER"
+HANA_SCHEMA = "SCHEMA1"
