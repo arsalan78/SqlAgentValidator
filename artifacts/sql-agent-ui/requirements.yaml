@@ -1,0 +1,15 @@
+packages:
+  "framer-motion": "For smooth transitions and terminal-like loading states"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes"
+  "@radix-ui/react-slot": "For reusable component slots"
+
+images:
+  - path: "artifacts/sql-agent-ui/public/images/abstract-bg.png"
+    description: "Dark, subtle, abstract geometric network mesh in deep navy and cyan, glowing nodes, very dark, suitable for a developer tool background"
+    aspect_ratio: "16:9"
+
+notes:
+  - Backend API is proxied through /api/fastapi
+  - The UI is designed as a dark-mode first developer tool
+  - Fetch is used directly for long-polling the agent generation endpoint

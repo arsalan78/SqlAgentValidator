@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "HANA SQL Agent"
+version = "1.0.0"
+id = "artifacts/sql-agent-ui"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+localPort = 23910
+name = "web"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/sql-agent-ui run dev"
+
+[services.env]
+PORT = "23910"
+BASE_PATH = "/"
+
+[services.production]
+build = ["pnpm", "--filter", "@workspace/sql-agent-ui", "run", "build"]
+publicDir = "artifacts/sql-agent-ui/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
