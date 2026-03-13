@@ -14,3 +14,70 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Runs a multi-agent LangGraph pipeline:
+  1. Schema Extractor — identifies relevant tables/columns
+  2. SQL Generator — creates HANA-compatible SQL
+  3. SQL Validator — verifies correctness and loops until valid or max iterations reached
+
+ * @summary Generate SAP HANA SQL from a natural language query
+ */
+export const generateSQLBodyMaxIterationsDefault = 5;
+export const generateSQLBodyMaxIterationsMax = 10;
+
+export const GenerateSQLBody = zod.object({
+  query: zod.string().describe("Natural language question to convert to SQL"),
+  maxIterations: zod
+    .number()
+    .min(1)
+    .max(generateSQLBodyMaxIterationsMax)
+    .default(generateSQLBodyMaxIterationsDefault)
+    .describe("Maximum number of generate→validate loops (default 5, max 10)"),
+});
+
+export const GenerateSQLResponse = zod.object({
+  query: zod.string().describe("Original user query"),
+  sql: zod.string().describe("Generated SAP HANA SQL query"),
+  passed: zod
+    .boolean()
+    .describe("Whether the validator approved the final SQL"),
+  iterations: zod
+    .number()
+    .describe("Number of generate→validate iterations performed"),
+  feedback: zod
+    .string()
+    .nullish()
+    .describe("Validator feedback if the final query did not pass"),
+  agentLog: zod
+    .array(zod.string())
+    .describe("Detailed step-by-step log of all agent actions"),
+  error: zod
+    .string()
+    .nullish()
+    .describe("Error message if the pipeline encountered a fatal error"),
+});
+
+/**
+ * Returns all tables configured in the table registry (plug-and-play schema catalog)
+ * @summary List all registered tables
+ */
+export const ListTablesResponse = zod.object({
+  tables: zod.array(
+    zod.object({
+      schema: zod.string(),
+      tableName: zod.string(),
+      fullName: zod.string(),
+      description: zod.string(),
+      columns: zod.array(
+        zod.object({
+          name: zod.string(),
+          type: zod.string(),
+          description: zod.string(),
+          primaryKey: zod.boolean(),
+          nullable: zod.boolean(),
+        }),
+      ),
+    }),
+  ),
+});

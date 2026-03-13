@@ -5,18 +5,27 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ErrorResponse,
+  GenerateSQLRequest,
+  GenerateSQLResponse,
+  HealthStatus,
+  ListTablesResponse,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -92,6 +101,173 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Runs a multi-agent LangGraph pipeline:
+  1. Schema Extractor — identifies relevant tables/columns
+  2. SQL Generator — creates HANA-compatible SQL
+  3. SQL Validator — verifies correctness and loops until valid or max iterations reached
+
+ * @summary Generate SAP HANA SQL from a natural language query
+ */
+export const getGenerateSQLUrl = () => {
+  return `/api/sql-agent/generate`;
+};
+
+export const generateSQL = async (
+  generateSQLRequest: GenerateSQLRequest,
+  options?: RequestInit,
+): Promise<GenerateSQLResponse> => {
+  return customFetch<GenerateSQLResponse>(getGenerateSQLUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateSQLRequest),
+  });
+};
+
+export const getGenerateSQLMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateSQL>>,
+    TError,
+    { data: BodyType<GenerateSQLRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateSQL>>,
+  TError,
+  { data: BodyType<GenerateSQLRequest> },
+  TContext
+> => {
+  const mutationKey = ["generateSQL"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateSQL>>,
+    { data: BodyType<GenerateSQLRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateSQL(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateSQLMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateSQL>>
+>;
+export type GenerateSQLMutationBody = BodyType<GenerateSQLRequest>;
+export type GenerateSQLMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate SAP HANA SQL from a natural language query
+ */
+export const useGenerateSQL = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateSQL>>,
+    TError,
+    { data: BodyType<GenerateSQLRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateSQL>>,
+  TError,
+  { data: BodyType<GenerateSQLRequest> },
+  TContext
+> => {
+  return useMutation(getGenerateSQLMutationOptions(options));
+};
+
+/**
+ * Returns all tables configured in the table registry (plug-and-play schema catalog)
+ * @summary List all registered tables
+ */
+export const getListTablesUrl = () => {
+  return `/api/sql-agent/tables`;
+};
+
+export const listTables = async (
+  options?: RequestInit,
+): Promise<ListTablesResponse> => {
+  return customFetch<ListTablesResponse>(getListTablesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListTablesQueryKey = () => {
+  return [`/api/sql-agent/tables`] as const;
+};
+
+export const getListTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTables>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTables>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListTablesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTables>>> = ({
+    signal,
+  }) => listTables({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTables>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTables>>
+>;
+export type ListTablesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all registered tables
+ */
+
+export function useListTables<
+  TData = Awaited<ReturnType<typeof listTables>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listTables>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListTablesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -8,3 +8,55 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface GenerateSQLRequest {
+  /** Natural language question to convert to SQL */
+  query: string;
+  /**
+   * Maximum number of generate→validate loops (default 5, max 10)
+   * @minimum 1
+   * @maximum 10
+   */
+  maxIterations?: number;
+}
+
+export interface GenerateSQLResponse {
+  /** Original user query */
+  query: string;
+  /** Generated SAP HANA SQL query */
+  sql: string;
+  /** Whether the validator approved the final SQL */
+  passed: boolean;
+  /** Number of generate→validate iterations performed */
+  iterations: number;
+  /** Validator feedback if the final query did not pass */
+  feedback?: string | null;
+  /** Detailed step-by-step log of all agent actions */
+  agentLog: string[];
+  /** Error message if the pipeline encountered a fatal error */
+  error?: string | null;
+}
+
+export interface ColumnInfo {
+  name: string;
+  type: string;
+  description: string;
+  primaryKey: boolean;
+  nullable: boolean;
+}
+
+export interface TableInfo {
+  schema: string;
+  tableName: string;
+  fullName: string;
+  description: string;
+  columns: ColumnInfo[];
+}
+
+export interface ListTablesResponse {
+  tables: TableInfo[];
+}
+
+export interface ErrorResponse {
+  error: string;
+}

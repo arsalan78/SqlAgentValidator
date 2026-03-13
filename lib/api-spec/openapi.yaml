@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: sql-agent
+    description: LangGraph SQL agent pipeline for SAP HANA
 paths:
   /healthz:
     get:
@@ -24,6 +26,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /sql-agent/generate:
+    post:
+      operationId: generateSQL
+      tags: [sql-agent]
+      summary: Generate SAP HANA SQL from a natural language query
+      description: |
+        Runs a multi-agent LangGraph pipeline:
+          1. Schema Extractor — identifies relevant tables/columns
+          2. SQL Generator — creates HANA-compatible SQL
+          3. SQL Validator — verifies correctness and loops until valid or max iterations reached
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateSQLRequest"
+      responses:
+        "200":
+          description: SQL generation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateSQLResponse"
+        "400":
+          description: Bad request (missing or invalid query)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Agent pipeline error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sql-agent/tables:
+    get:
+      operationId: listTables
+      tags: [sql-agent]
+      summary: List all registered tables
+      description: Returns all tables configured in the table registry (plug-and-play schema catalog)
+      responses:
+        "200":
+          description: List of registered tables with columns
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListTablesResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +87,113 @@ components:
       required:
         - status
 
+    GenerateSQLRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Natural language question to convert to SQL
+          example: "Show me the top 10 customers by total order amount this year"
+        maxIterations:
+          type: integer
+          description: Maximum number of generate→validate loops (default 5, max 10)
+          minimum: 1
+          maximum: 10
+          default: 5
+      required:
+        - query
+
+    GenerateSQLResponse:
+      type: object
+      properties:
+        query:
+          type: string
+          description: Original user query
+        sql:
+          type: string
+          description: Generated SAP HANA SQL query
+        passed:
+          type: boolean
+          description: Whether the validator approved the final SQL
+        iterations:
+          type: integer
+          description: Number of generate→validate iterations performed
+        feedback:
+          type: string
+          nullable: true
+          description: Validator feedback if the final query did not pass
+        agentLog:
+          type: array
+          items:
+            type: string
+          description: Detailed step-by-step log of all agent actions
+        error:
+          type: string
+          nullable: true
+          description: Error message if the pipeline encountered a fatal error
+      required:
+        - query
+        - sql
+        - passed
+        - iterations
+        - agentLog
+
+    ListTablesResponse:
+      type: object
+      properties:
+        tables:
+          type: array
+          items:
+            $ref: "#/components/schemas/TableInfo"
+      required:
+        - tables
+
+    TableInfo:
+      type: object
+      properties:
+        schema:
+          type: string
+        tableName:
+          type: string
+        fullName:
+          type: string
+        description:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ColumnInfo"
+      required:
+        - schema
+        - tableName
+        - fullName
+        - description
+        - columns
+
+    ColumnInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        description:
+          type: string
+        primaryKey:
+          type: boolean
+        nullable:
+          type: boolean
+      required:
+        - name
+        - type
+        - description
+        - primaryKey
+        - nullable
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
