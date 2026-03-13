@@ -5,3 +5,4 @@ langchain-openai==1.1.11
 langchain-core>=0.3.0
 pydantic>=2.0.0
 python-dotenv==1.0.1
+hdbcli==2.27.24

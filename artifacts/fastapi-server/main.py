@@ -27,6 +27,7 @@ from typing import Optional, List
 
 from table_registry import TABLE_REGISTRY
 from graph import run_sql_agent
+from hana_connection import test_connection, get_schema_from_hana
 
 
 app = FastAPI(
@@ -86,6 +87,23 @@ class TablesResponse(BaseModel):
 @app.get("/healthz")
 def health_check():
     return {"status": "ok", "service": "fastapi-sql-agent"}
+
+
+@app.get("/hana/test")
+def hana_test():
+    """Test the HANA connection and return version info."""
+    return test_connection()
+
+
+@app.get("/hana/schema")
+def hana_schema(schemas: str = ""):
+    """
+    Introspect the live HANA schema.
+    Pass ?schemas=SCHEMA1,SCHEMA2 to filter, or omit for default from HANA_SCHEMA env var.
+    """
+    schema_list = [s.strip() for s in schemas.split(",") if s.strip()] if schemas else None
+    tables = get_schema_from_hana(schema_list)
+    return {"tables": tables, "count": len(tables)}
 
 
 @app.post("/sql-agent/generate", response_model=GenerateResponse)
