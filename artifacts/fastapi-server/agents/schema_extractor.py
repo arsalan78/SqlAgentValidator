@@ -62,11 +62,14 @@ def _hana_tables_to_registry(raw: list) -> list[TableDefinition]:
             )
             for c in t.get("columns", [])
         ]
+        schema = t["schema"]
+        table_name = t["table_name"]
         result.append(
             TableDefinition(
-                schema=t["schema"],
-                table_name=t["table_name"],
-                description=t.get("description", ""),
+                schema=schema,
+                table_name=table_name,
+                full_name=t.get("full_name", f"{schema}.{table_name}"),
+                description=t.get("description", f"Table {schema}.{table_name}"),
                 columns=cols,
             )
         )
@@ -88,23 +91,25 @@ def schema_extractor_agent(state: AgentState) -> AgentState:
     new_log = list(state["agent_log"]) + [log_prefix]
 
     # ── Try to get live schema from HANA ────────────────────────────────────
-    hana_host = os.environ.get("HANA_HOST", "")
-    use_live = HANA_AVAILABLE and hana_host and not hana_host.startswith("dummy")
+    all_tables = TABLE_REGISTRY
+    source = "static registry"
 
-    if use_live:
+    if HANA_AVAILABLE and os.environ.get("HANA_HOST"):
         new_log.append("[SchemaExtractor] Fetching live schema from HANA...")
-        raw = get_schema_from_hana()
-        if raw and "error" not in raw[0]:
-            all_tables = _hana_tables_to_registry(raw)
-            source = "live HANA"
-        else:
-            err = raw[0].get("error", "unknown") if raw else "no tables returned"
-            new_log.append(f"[SchemaExtractor] HANA schema fetch failed: {err} — using registry")
-            all_tables = TABLE_REGISTRY
-            source = "static registry (HANA unreachable)"
-    else:
-        all_tables = TABLE_REGISTRY
-        source = "static registry (HANA not configured)"
+        try:
+            raw = get_schema_from_hana()
+            if raw and "error" not in raw[0]:
+                converted = _hana_tables_to_registry(raw)
+                if converted:
+                    all_tables = converted
+                    source = f"live HANA ({len(converted)} tables)"
+                else:
+                    new_log.append("[SchemaExtractor] HANA returned 0 tables — using static registry")
+            else:
+                err = raw[0].get("error", "unknown") if raw else "empty response"
+                new_log.append(f"[SchemaExtractor] HANA schema fetch failed: {err} — using static registry")
+        except Exception as e:
+            new_log.append(f"[SchemaExtractor] HANA connection error: {e} — using static registry")
 
     new_log.append(f"[SchemaExtractor] Schema source: {source} ({len(all_tables)} tables available)")
 
